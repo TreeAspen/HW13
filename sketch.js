@@ -1,85 +1,113 @@
-// serial variables
+let song; 
+let mFFT;
+let wand;
+let colorA, colorB, colorC;
+let moves = [];
+let colorPicker;
+let amplitude;
+let ballScale = 50;
+
 let mSerial;
-
 let connectButton;
-
 let readyToReceive;
+let cBackgroundColor;
 
-// project variables
-let mElls = [];
+class Movey {
+  constructor(x, y, scale) {
+    this.pos = createVector(x, y);
+    this.vel = createVector(random(-5, 5), random(-5, 5));
+    this.scale = scale
+    this.color = color(random(100, 255), random(200, 255), random(100, 255));
+  }
+  overlap(other) {
+    if (other === this) return false;
+    let dist = p5.Vector.dist(this.pos, other.pos);
+    return dist < (this.scale / 2 * sin(frameCount) + other.scale / 2 * sin(frameCount));
+  }
+  updateAndDraw(others) {
+    this.pos.add(this.vel);
+    if (this.pos.x > width - this.scale || this.pos.x < this.scale) {
+      this.vel.x *= -1;
+    }
+    if (this.pos.y > height - this.scale || this.pos.y < this.scale) {
+      this.vel.y *= -1;
+    }
+    let overlap = false;
+    for (let other of others) {
+      overlap |= this.overlap(other);
+    }
+    if (overlap) {
+      this.color = color(random(100, 255), random(200, 255), random(100, 255));
+    }
+    push();
+    stroke(this.color, 200);
+    fill(this.color);
+    ellipse(this.pos.x, this.pos.y, this.scale);
+    pop();
+  }
+}
 
 function receiveSerial() {
-  let line = mSerial.readUntil("\n");
-  trim(line);
-  if (!line) return;
-
-  if (line.charAt(0) != "{") {
-    print("error: ", line);
+  let mLine = mSerial.readUntil("\n");
+  trim(mLine);
+  if (!mLine) return;
+  if (mLine.charAt(0) != "{") {
+    print("error: ", mLine);
     readyToReceive = true;
     return;
   }
+  let data = JSON.parse(mLine).data;
+  print(mLine, data);
 
-  // get data from Serial string
-  let data = JSON.parse(line).data;
   let a0 = data.A0;
+  let a1 = data.A1;
   let d2 = data.D2;
-
-  // use data to update project variables
-  if (d2.isPressed) {
-    mElls.push({
-      x: random(width),
-      y: random(height),
-      c: map(d2.count % 20, 0, 20, 155, 255),
-      d: map(a0.value, 0, 4095, 20, 200),
-    });
+  cBackgroundColor = map(a1, 0, 800, 0, 255);
+  readyToReceive = true;
+  let mappedScale = map(a0, 0, 4096, 5, 50);
+  if (d2 === 1) {
+    moves.push(new Movey(mouseX, mouseY, mappedScale));
   }
 
-  // serial update
-  readyToReceive = true;
+  print("A0:", a0, "A1:", a1, "D2:", d2);
 }
 
 function connectToSerial() {
   if (!mSerial.opened()) {
     mSerial.open(9600);
-
-    readyToReceive = true;
     connectButton.hide();
+    readyToReceive = true;
   }
 }
 
 function setup() {
-  // setup project
   createCanvas(windowWidth, windowHeight);
-
-  // setup serial
-  readyToReceive = false;
 
   mSerial = createSerial();
 
   connectButton = createButton("Connect To Serial");
   connectButton.position(width / 2, height / 2);
   connectButton.mousePressed(connectToSerial);
+
+  cBackgroundColor = 0;
+
+  readyToReceive = false;
 }
 
 function draw() {
-  // project logic
-  background(0);
+  background(cBackgroundColor);
 
-  for (let i = 0; i < mElls.length; i++) {
-    let me = mElls[i];
-    fill(me.c, 0, 0);
-    ellipse(me.x, me.y, me.d, me.d);
-  }
-
-  // update serial: request new data
   if (mSerial.opened() && readyToReceive) {
-    readyToReceive = false;
     mSerial.clear();
-    mSerial.write(0xab);
+    mSerial.write(0xAB);
+    readyToReceive = false;
   }
 
-  // update serial: read new data
-  if (mSerial.availableBytes() > 8) {
+  if (mSerial.availableBytes() > 0) {
     receiveSerial();
+  }
+
+  for (let i = 0; i < moves.length; i++) {
+    moves[i].updateAndDraw(moves);
   }
 }
