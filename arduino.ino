@@ -1,3 +1,4 @@
+#include <ArduinoJson.h>
 void sendData(int a0Val, int a1Val, int d2Val) {
   StaticJsonDocument<128> resJson;
   JsonObject data = resJson.createNestedObject("data");
